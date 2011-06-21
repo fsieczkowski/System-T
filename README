@@ -5,12 +5,12 @@ Type Theory Foundations at OPLSS 2011.
 ** Syntax
    Defines the syntax of the language and some notations. Nothing fancy.
 ** Substitution
-   Defines substitutions for de Bruijn indices. Pretty much the most boring thing possible.
+   Defines substitutions for de Bruijn indices. Pretty much the most boring
+   thing possible.
 ** Semantics
    Defines static and dynamic semantics of the language, proves the standard
    properties: weakening, progress, preservation, etc. and lemmas needed by
    termination proof that are not related to logical relations.
-
 ** Termination
-   Defines the reducibility relation and proceeds to prove
-   head expansion and termination.
+   Defines the reducibility relation and proceeds to prove head expansion
+   and termination.
