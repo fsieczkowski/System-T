@@ -22,6 +22,8 @@ Fixpoint subt K n M :=
     | hd M => hd [K ↑ n]M
     | tl M => tl [K ↑ n]M
     | seed M M₀ M₁ => seed [K ↑ n]M [K ↑ S n]M₀ [K ↑ S n]M₁
+    | TT => TT
+    | FF => FF
   end where " [ K ↑ n ] M " := (subt K n M) : t_scope.
 
 (* Substitution for the list γ, starting from index n in M *)
@@ -95,6 +97,18 @@ Proof.
 Qed.
 Lemma sub_seed : forall γ n M M₀ M₁,
   ([γ ! n](seed M M₀ M₁)) = seed [γ ! n]M [γ ! S n]M₀ [γ ! S n]M₁.
+Proof.
+  induction γ; intros; simpl in *; [reflexivity |].
+  rewrite IHγ; simpl; reflexivity.
+Qed.
+Lemma sub_TT : forall γ n,
+  ([γ ! n]TT) = TT.
+Proof.
+  induction γ; intros; simpl in *; [reflexivity |].
+  rewrite IHγ; simpl; reflexivity.
+Qed.
+Lemma sub_FF : forall γ n,
+  ([γ ! n]FF) = FF.
 Proof.
   induction γ; intros; simpl in *; [reflexivity |].
   rewrite IHγ; simpl; reflexivity.

@@ -1,10 +1,15 @@
 (** This file contains the termination argument via logical relations *)
 
-Require Import Semantics.
+Require Export Semantics.
 Open Scope t_scope.
 Open Scope list_scope.
 
 Section Definitions.
+
+  (* Logical relation at 2 *)
+  Inductive R2 : te -> Prop :=
+  | RT : forall M (HRed : M ↦* TT), R2 M
+  | RF : forall M (HRed : M ↦* FF), R2 M.
 
   (* Logical relation at type ω *)
   Inductive Rω : te -> Prop :=
@@ -19,6 +24,7 @@ Section Definitions.
      for negative occurrences of a relation in the A₁ → A₂ case *)
   Fixpoint R A M : Prop :=
     match A with
+      | 2 => R2 M
       | ω => Rω M
       | A₁ → A₂ => forall N (HTN : nil ⊢ N ::: A₁) (HR : R A₁ N), R A₂ (M @ N)
       | stream A => Rstream (R A) M
@@ -42,6 +48,8 @@ Section Termination_proof.
     R A M.
   Proof.
     induction A; intros; simpl in *.
+    (* bool *)
+    inversion HR; [ apply RT | apply RF ]; econstructor; eassumption.
     (* nat *)
     inversion HR.
       apply Rω_z; unfold steps; econstructor; eassumption.
@@ -147,6 +155,10 @@ Section Termination_proof.
       eapply subst_types; [| simpl; eassumption]; simpl; tauto.
     change (R A [K :: nil ! 0]([γ ! 1]M₁)); rewrite subcomp.
     apply IHHT3; simpl; tauto.
+    (* TT *)
+    rewrite sub_TT; apply RT; constructor.
+    (* FF *)
+    rewrite sub_FF; apply RF; constructor.
   Qed.
 
   Theorem termination : forall M (HT : nil ⊢ M ::: ω),

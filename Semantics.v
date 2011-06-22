@@ -47,6 +47,8 @@ Section Statics.
       (HTH : A :: Γ ⊢ M₀ ::: A)
       (HTT : A :: Γ ⊢ M₁ ::: A),
       Γ ⊢ seed M M₀ M₁ ::: stream A
+  | tc_TT  : forall Γ, Γ ⊢ TT ::: 2
+  | tc_FF  : forall Γ, Γ ⊢ FF ::: 2  
   where " Γ ⊢ M ::: A " := (types Γ M A) : t_scope.
 
   (* Typing relation for substitutions (only for closed substitutions) *)
@@ -71,7 +73,9 @@ Section Dynamics.
   | val_lam : forall A M,
       value (λ A, M)
   | val_seed: forall M M₀ M₁,
-      value (seed M M₀ M₁).
+      value (seed M M₀ M₁)
+  | val_TT  : value TT
+  | val_FF  : value FF.
 
   Inductive step : te -> te -> Prop :=
   | red_β    : forall A M N,
@@ -221,43 +225,32 @@ Section Properties.
     (HT : nil ⊢ M ::: A),
     value M \/ exists N, M ↦ N.
   Proof.
-    induction M; intros; simpl in *.
+    induction M; intros; simpl in *; inversion HT; subst;
+      intuition eauto using value.
     (* var *)
-    inversion HT; destruct n; discriminate.
-    (* lam *)
-    left; apply val_lam.
+    destruct n; discriminate.
     (* app *)
-    inversion HT; subst; right.
-    specialize (IHM1 _ HTM); clear IHM2 HTN.
+    right; specialize (IHM1 _ HTM); clear IHM2 HTN.
     destruct IHM1 as [HV | [N HRed]].
       inversion HV; subst; try (inversion HTM; fail); [].
       eexists; apply red_β.
     exists (N @ M2); apply red_appC; assumption.
-    (* z *)
-    left; apply val_z.
-    (* s *)
-    left; apply val_s.
     (* rec *)
-    right; clear IHM2 IHM3; inversion HT; subst.
-    specialize (IHM1 _ HTM); destruct IHM1 as [HV | [N HRed]].
+    right; specialize (IHM1 _ HTM); destruct IHM1 as [HV | [N HRed]].
       inversion HV; subst; try (inversion HTM; fail).
         eexists; apply red_recz.
       eexists; apply red_recs.
     eexists; apply red_recC; eassumption.
     (* hd *)
-    right; inversion HT; subst.
-    specialize (IHM _ HTM); destruct IHM as [HV | [N HRed]].
+    right; specialize (IHM _ HTM); destruct IHM as [HV | [N HRed]].
       inversion HV; subst; try (inversion HTM; fail).
       eexists; apply red_hds.
     eexists; apply red_hdC; eassumption.
     (* tl *)
-    right; inversion HT; subst.
-    specialize (IHM _ HTM); destruct IHM as [HV | [N HRed]].
+    right; specialize (IHM _ HTM); destruct IHM as [HV | [N HRed]].
       inversion HV; subst; try (inversion HTM; fail).
       eexists; apply red_tls.
     eexists; apply red_tlC; eassumption.
-    (* seed *)
-    left; apply val_seed.
   Qed.
 
   (* Type preservation is needed to use the head expansion lemma *)

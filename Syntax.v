@@ -2,12 +2,14 @@
 
 (* Types *)
 Inductive ty :=
-| tnat : ty
+| tbool  : ty
+| tnat   : ty
 | tarrow : ty -> ty -> ty
 | stream : ty -> ty.
 
 Notation " A '→' B " := (tarrow A B) (at level 30, right associativity) : t_scope.
 Notation " 'ω' " := tnat : t_scope.
+Notation " '2' " := tbool : t_scope.
 Open Scope t_scope.
 
 (* Terms *)
@@ -21,7 +23,9 @@ Inductive te :=
 | rec  : te -> te -> te -> te
 | hd   : te -> te
 | tl   : te -> te
-| seed : te -> te -> te -> te.
+| seed : te -> te -> te -> te
+| TT   : te
+| FF   : te.
 
 Notation "'λ' A , M " := (lam A M) (at level 50) : t_scope.
 Notation " # n " := (var n) (at level 20) : t_scope.
