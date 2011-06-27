@@ -310,3 +310,9 @@ Proof.
 Qed.
 
 Scheme types_Ind := Induction for types Sort Prop.
+
+Hint Rewrite sub_lam sub_app sub_z sub_s sub_rec sub_hd sub_tl sub_seed
+  sub_TT sub_FF : sub.
+
+Ltac msimp :=
+  autorewrite with sub.
