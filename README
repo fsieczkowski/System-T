@@ -14,3 +14,7 @@ Type Theory Foundations at OPLSS 2011.
 ** Termination
    Defines the reducibility relation and proceeds to prove head expansion
    and termination.
+** Equivalence
+   Defines contexts and context typings, observable equivalence and logical equivalence,
+   and proves soundness of logical equivalence wrt observable equivalence. Provdies one
+   example of a logical equivalence (x : ω ⊢ x ∼ x + 0 : ω).

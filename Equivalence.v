@@ -530,7 +530,6 @@ Proof.
   replace n0 with (length (@nil te) + n0) by reflexivity;
     erewrite <- !closed_sub with (Γ := nil); simpl;
       eauto using log_equiv_typesL, log_equiv_typesR.
-  admit (* add typings *).
   (* lam *)
   repeat split; try (eapply tc_lam, subst_types; simpl;
     eauto using ctx_lequiv_typesL, ctx_lequiv_typesR).
@@ -678,4 +677,64 @@ Proof.
   eapply context_type; eauto; apply (proj2_sig M0).
   apply tc_seed; eapply subst_types; eauto using ctx_lequiv_typesR; simpl.
   eapply context_type; eauto; apply (proj2_sig N).
+Qed.
+
+Program Definition plus : { K : te | nil ⊢ K ::: ω → ω → ω } :=
+  exist _ (λ ω, λ ω, rec (#1) (#0) (s (#1))) _.
+Next Obligation.
+  do 2 apply tc_lam.
+  apply tc_rec.
+  apply tc_var; reflexivity.
+  apply tc_var; reflexivity.
+  apply tc_s, tc_var; reflexivity.
+Qed.
+
+Program Definition xp0 : { K : te | ω :: nil ⊢ K ::: ω} :=
+  exist _ (proj1_sig plus @ #0 @ z) _.
+Next Obligation.
+  eapply tc_app; [| eauto using types].
+  eapply tc_app; [| apply tc_var; reflexivity].
+  change (nil ++ ω :: nil ⊢ proj1_sig plus ::: ω → ω → ω); apply weaken, (proj2_sig plus).
+Qed.
+
+Program Definition x : { K : te | ω :: nil ⊢ K ::: ω} :=
+  exist _ (#0) _.
+Next Obligation.
+  apply tc_var; reflexivity.
+Qed.
+
+Lemma equiv : open_simeq (ω :: nil) ω x xp0.
+Proof.
+  unfold open_simeq; intros.
+  destruct γ₁; destruct γ₂; try contradiction; simpl in HEΓ.
+  destruct γ₁; destruct γ₂; try tauto; destruct HEΓ as [[HTL [HTR HT]]  _].
+  symmetry; apply head_exp_star with (M' := rec t0 z (s (#1))); simpl.
+    eapply tc_app; [| eauto using types].
+    eapply tc_app; eauto; apply (proj2_sig plus).
+  intuition.  
+    apply tc_rec; eauto using types.
+  induction HT.
+    apply Eqωz; auto.
+    eapply clos_rt_rt1n, rt_trans.
+      apply clos_rt1n_rt, rec_cong_star; eauto.
+    apply rt_step, red_recz.
+  eapply Eqωs.
+  eapply clos_rt_rt1n, rt_trans; [| eapply rt_trans].
+    apply clos_rt1n_rt, rec_cong_star; eassumption.
+    apply rt_step; eauto using step.
+    msimp; simpl.
+    apply rt_refl.
+  eauto.
+  eapply preservation_star in HNs; eauto.
+  eapply preservation_star in HMs; eauto.
+  inversion HMs; subst; inversion HNs; subst; clear HMs HNs.
+  replace 0 with (length (@nil ty) + 0) by reflexivity;
+    erewrite <- closed_sub with (Γ := nil); eauto.
+  econstructor 2; eauto using step.
+  msimp; simpl.
+  econstructor 2; eauto using step.
+  msimp; simpl.
+  replace 0 with (length (@nil ty) + 0) by reflexivity;
+    erewrite <- closed_sub with (Γ := nil); eauto.
+  simpl; constructor.
 Qed.
