@@ -305,6 +305,7 @@ Qed.
 Reserved Notation " M ≡ N ::: A " (at level 70).
 
 Fixpoint log_equiv (A : ty) (M N : te) : Prop :=
+  nil ⊢ M ::: A /\ nil ⊢ N ::: A /\
   match A with
     | 2 => M ≃ N
     | ω => Eqω M N
@@ -314,23 +315,24 @@ Fixpoint log_equiv (A : ty) (M N : te) : Prop :=
 
 Instance log_equiv_symm A : Symmetric (log_equiv A).
 Proof.
-  induction A; eauto with typeclass_instances.
-  (* arrow *)
-  unfold Symmetric; simpl; intros.
-  symmetry; eapply H; symmetry; eassumption.
-  (* stream *)
-  unfold Symmetric; simpl; apply Eqs_sym; assumption.
+  induction A; unfold Symmetric; simpl; intuition.
 Qed.
 
 Instance log_equiv_trans A : Transitive (log_equiv A).
 Proof.
-  induction A; eauto with typeclass_instances.
-  (* arrow *)
-  unfold Transitive; simpl; intros.
-  assert (HEq' : N' ≡ N' ::: A1) by (etransitivity; [symmetry |]; eassumption).
-  etransitivity; eauto.
-  (* stream *)
-  unfold Transitive; simpl; apply Eqs_trans; assumption.
+  induction A; unfold Transitive; simpl; intuition; etransitivity; eauto.
+  eapply H5; etransitivity; [symmetry |]; eauto.
+Qed.
+
+Lemma log_equiv_typesL : forall M N A (HEq : M ≡ N ::: A),
+  nil ⊢ M ::: A.
+Proof.
+  destruct A; simpl in *; intuition.
+Qed.
+Lemma log_equiv_typesR : forall M N A (HEq : M ≡ N ::: A),
+  nil ⊢ N ::: A.
+Proof.
+  destruct A; simpl in *; intuition.
 Qed.
 
 Reserved Notation " γ₁ ∼ γ₂ ::: Γ " (at level 70).
@@ -353,6 +355,16 @@ Proof.
   induction Γ; unfold Transitive; intros;
     destruct x; destruct y; destruct z; try contradiction; [tauto |].
   simpl in *; destruct H; destruct H0; split; etransitivity; eassumption.
+Qed.
+
+Lemma ctx_lequiv_typesL : forall Γ γ₁ γ₂ (HEq : γ₁ ∼ γ₂ ::: Γ), γ₁ :–: Γ.
+Proof.
+  induction Γ; destruct γ₁; destruct γ₂; simpl in *; trivial || contradiction ||
+    intuition eauto using log_equiv_typesL.
+Qed.
+Lemma ctx_lequiv_typesR : forall Γ γ₁ γ₂ (HEq : γ₁ ∼ γ₂ ::: Γ), γ₂ :–: Γ.
+Proof.
+  intros; symmetry in HEq; eauto using ctx_lequiv_typesL.
 Qed.
 
 Definition open_simeq Γ A (M N : {K : te | Γ ⊢ K ::: A}) := forall γ₁ γ₂
@@ -388,38 +400,114 @@ Ltac msimp :=
   autorewrite with sub.
 
 Lemma head_expansion : forall A M M' N
+  (HT : nil ⊢ M ::: A)
   (HR : M' ≡ N ::: A)
   (HS : M ↦ M'),
   M ≡ N ::: A.
 Proof.
-  induction A; intros; simpl in *.
+  induction A; intros; simpl in *; intuition.
   (* bool *)
-  inversion HR; [ apply equivT | apply equivF ]; auto; econstructor; eauto.
+  inversion H2; [ apply equivT | apply equivF ]; auto; econstructor; eauto.
   (* nat *)
-  inversion HR; subst; clear HR.
+  inversion H2; subst; clear H2.
     apply Eqωz; auto; econstructor; eassumption.
   eapply Eqωs; eauto; econstructor; eassumption.
   (* arr *)
   intros.
-  eapply IHA2; [| apply red_appC; eassumption].
-  apply HR; assumption.
+  eapply IHA2; eauto using log_equiv_typesL, types, step.
   (* stream *)
-  generalize dependent M'; revert N M.
+  clear H1 H; generalize dependent M'; revert N M HT.
   cofix; intros.
-  inversion HR; subst; clear HR; apply EqS.
-    eapply IHA; [eassumption | apply red_hdC; eassumption].
-  eapply head_expansion; eauto using step.
+  inversion H2; subst; clear H2; apply EqS; [eapply IHA | eapply head_expansion];
+    eauto using types, step.
 Qed.
 
 (* lifting of head expansion to reflexive transitive closure *)
 Lemma head_exp_star : forall A M M' N
+  (HT : nil ⊢ M ::: A)
   (HR : M' ≡ N ::: A)
   (HS : M ↦* M'),
   M ≡ N ::: A.
 Proof.  
   intros; induction HS; [assumption |].
-  eapply head_expansion; [| eassumption].
-  tauto.
+  eapply head_expansion; [| | eassumption]; eauto using preservation.
+Qed.
+
+Lemma preservation_star : forall A M N
+  (HT : nil ⊢ M ::: A)
+  (HR : M ↦* N),
+  nil ⊢ N ::: A.
+Proof.
+  induction 2; eauto using preservation.
+Qed.
+
+Lemma seed_cong : forall M M₀ M₁ N N₀ N₁ K L A
+  (HMN  : M ≡ N ::: A)
+  (HMN₀ : forall K L, K ≡ L ::: A -> [K ↑ 0]M₀ ≡ [L ↑ 0]N₀ ::: A)
+  (HMN₁ : forall K L, K ≡ L ::: A -> [K ↑ 0]M₁ ≡ [L ↑ 0]N₁ ::: A)
+  (HTK  : nil ⊢ K ::: stream A)
+  (HTL  : nil ⊢ L ::: stream A)
+  (HRK  : K ↦* seed M M₀ M₁)
+  (HRL  : L ↦* seed N N₀ N₁),
+  K ≡ L ::: stream A.
+Proof.
+  intros; simpl; intuition.
+  generalize dependent M; generalize dependent N; revert K L HTK HTL.
+  cofix; intros; simpl; apply EqS.
+    apply head_exp_star with (M' := [M ↑ 0]M₀); eauto using types.
+    symmetry; apply head_exp_star with (M' := [N ↑ 0]N₀); eauto using types.
+    symmetry; eapply HMN₀; assumption.
+    apply clos_rt_rt1n; eapply rt_trans;
+      [apply clos_rt1n_rt, hd_cong_star; eassumption |];
+      eauto using rt_step, step.
+    apply clos_rt_rt1n; eapply rt_trans;
+      [apply clos_rt1n_rt, hd_cong_star; eassumption |];
+      eauto using rt_step, step.
+  eapply seed_cong; try (apply tc_tl; auto).
+    apply clos_rt_rt1n; eapply rt_trans;
+      [apply clos_rt1n_rt, tl_cong_star; eassumption |];
+      eauto using rt_step, step.
+    eauto.
+  apply clos_rt_rt1n; eapply rt_trans;
+    [apply clos_rt1n_rt, tl_cong_star; eassumption |];
+    eauto using rt_step, step.
+Qed.
+
+Lemma rec_cong : forall A M M₀ M₁ N N₀ N₁
+  (HTM₁ : ω :: A :: nil ⊢ M₁ ::: A)
+  (HTN₁ : ω :: A :: nil ⊢ N₁ ::: A)
+  (HMN  : M ≡ N ::: ω)
+  (HMN₀ : M₀ ≡ N₀ ::: A)
+  (HMN₁ : forall K L (HKL : K ≡ L ::: ω) (HRKL : rec K M₀ M₁ ≡ rec L N₀ N₁ ::: A),
+    [K :: rec K M₀ M₁ :: nil ! 0]M₁ ≡ [L :: rec L N₀ N₁ :: nil ! 0]N₁ ::: A),
+  rec M M₀ M₁ ≡ rec N N₀ N₁ ::: A.
+Proof.
+  intros; simpl.
+  destruct HMN as [HTM [HTN HMN]]; induction HMN.
+    apply head_exp_star with M₀; eauto using types, log_equiv_typesL.
+    symmetry; apply head_exp_star with N₀; eauto using types, log_equiv_typesR.
+    symmetry; eauto.
+    apply clos_rt_rt1n; eapply rt_trans;
+      [apply clos_rt1n_rt, rec_cong_star; eassumption |];
+      eauto using rt_step, step.
+    apply clos_rt_rt1n; eapply rt_trans;
+      [apply clos_rt1n_rt, rec_cong_star; eassumption |];
+      eauto using rt_step, step.
+  apply head_exp_star with ([M' :: rec M' M₀ M₁ :: nil ! 0]M₁);
+    eauto using types, log_equiv_typesL.
+  symmetry; apply head_exp_star with ([N' :: rec N' N₀ N₁ :: nil ! 0]N₁);
+    eauto using types, log_equiv_typesR.
+  assert (HTM' : nil ⊢ M' ::: ω) by
+    (eapply preservation_star in HMs; eauto; inversion HMs; subst; auto).
+  assert (HTN' : nil ⊢ N' ::: ω) by
+    (eapply preservation_star in HNs; eauto; inversion HNs; subst; auto).
+  symmetry; eapply HMN₁; simpl; eauto.
+  apply clos_rt_rt1n; eapply rt_trans;
+    [apply clos_rt1n_rt, rec_cong_star; eassumption |];
+    eauto using rt_step, step.
+  apply clos_rt_rt1n; eapply rt_trans;
+    [apply clos_rt1n_rt, rec_cong_star; eassumption |];
+    eauto using rt_step, step.
 Qed.
 
 Lemma refl : forall Γ A, Reflexive (open_simeq Γ A).
@@ -437,10 +525,21 @@ Proof.
   destruct n; simpl in *; [inversion HFind; subst; clear HFind |].
     rewrite plus_comm; simpl; rewrite <- !subst_gt; simpl; auto with arith.
     destruct (eq_nat_dec n0 n0); tauto.
+  replace (n0 + S n) with (S n0 + n) by omega.
+  eapply IHΓ with (n0 := S n0) in HFind; [| intuition eassumption].
+  replace n0 with (length (@nil te) + n0) by reflexivity;
+    erewrite <- !closed_sub with (Γ := nil); simpl;
+      eauto using log_equiv_typesL, log_equiv_typesR.
   admit (* add typings *).
   (* lam *)
-  eapply head_expansion; eauto using step.
+  repeat split; try (eapply tc_lam, subst_types; simpl;
+    eauto using ctx_lequiv_typesL, ctx_lequiv_typesR).
+  intros; eapply head_expansion; eauto using step.
+    eapply tc_app; [| eauto using log_equiv_typesL]; eapply tc_lam, subst_types; simpl;
+      eauto using ctx_lequiv_typesL.
   symmetry; eapply head_expansion; eauto using step.
+    eapply tc_app; [| eauto using log_equiv_typesR]; eapply tc_lam, subst_types; simpl;
+      eauto using ctx_lequiv_typesR.
   symmetry.
   rewrite !subcomp; eapply IHHMT; simpl; auto.
   (* app *)
@@ -449,92 +548,33 @@ Proof.
   (* z *)
   repeat constructor.
   (* s *)
+  repeat split; try (eapply tc_s, subst_types; simpl;
+    eauto using ctx_lequiv_typesL, ctx_lequiv_typesR).
   apply IHHMT in HEΓ; simpl in *.
+  destruct HEΓ as [HTL [HTR HEΓ]].
   eapply Eqωs; eauto; constructor.
   (* rec *)
-  specialize (IHHMT1 _ _ HEΓ); simpl in *.
-  revert IHHMT1; generalize [γ₁ ! 0]M; generalize [γ₂ ! 0]M;
-    intros K L HKL; induction HKL.
-    eapply head_exp_star; eauto using rec_cong_star.
-    eapply head_expansion; eauto using step; symmetry.
-    eapply head_exp_star; eauto using rec_cong_star.
-    eapply head_expansion; eauto using step; symmetry.
-    eapply IHHMT2; eauto.
-  eapply head_exp_star; eauto using rec_cong_star.
-  eapply head_expansion; eauto using step; symmetry.
-  eapply head_exp_star; eauto using rec_cong_star.
-  eapply head_expansion; eauto using step; symmetry.
-  rewrite !subcomp.
-  eapply IHHMT3; simpl; eauto.
+  eapply rec_cong.
+  eapply subst_types; simpl; eauto using ctx_lequiv_typesL.
+  eapply subst_types; simpl; eauto using ctx_lequiv_typesR.
+  apply IHHMT1; auto.
+  apply IHHMT2; auto.
+  intros; rewrite !subcomp; apply IHHMT3; simpl; auto.
   (* hd *)
-  apply IHHMT in HEΓ; simpl in *; inversion HEΓ; subst; clear HEΓ; auto.
+  apply IHHMT in HEΓ; simpl in *; destruct HEΓ as [HTL [HTR HEΓ]];
+    inversion HEΓ; subst; clear HEΓ; auto.
   (* tl *)
-  apply IHHMT in HEΓ; simpl in *; inversion HEΓ; subst; clear HEΓ; auto.
+  apply IHHMT in HEΓ; simpl in *; destruct HEΓ as [HTL [HTR HEΓ]];
+    inversion HEΓ; subst; clear HEΓ; eauto using types.
   (* seed *)
-  specialize (IHHMT1 _ _ HEΓ); simpl in *.
-  assert (exists K, exists L,
-    (seed [γ₁ ! 0]M [γ₁ ! 1]M₀ [γ₁ ! 1]M₁ ↦* seed K [γ₁ ! 1] M₀ [γ₁ ! 1]M₁) /\
-    (seed [γ₂ ! 0]M [γ₂ ! 1]M₀ [γ₂ ! 1]M₁ ↦* seed L [γ₂ ! 1] M₀ [γ₂ ! 1]M₁) /\
-    K ≡ L ::: A).
-    repeat eexists; repeat split; try constructor; assumption.
-  destruct H as [K [L [HRedK [HRedL HEq]]]].
-  generalize dependent L; generalize dependent K.
-  generalize (seed [γ₁ ! 0]M [γ₁ ! 1]M₀ [γ₁ ! 1]M₁) as MM;
-    generalize (seed [γ₂ ! 0]M [γ₂ ! 1]M₀ [γ₂ ! 1]M₁) as NN.
-  cofix; intros; apply EqS.
-    eapply head_exp_star; eauto using hd_cong_star.
-    eapply head_expansion; eauto using step; symmetry.
-    eapply head_exp_star; eauto using hd_cong_star.
-    eapply head_expansion; eauto using step; symmetry.
-    change ([K :: nil ! 0]([γ₁ ! 1]M₀) ≡ [L :: nil ! 0]([γ₂ ! 1]M₀) ::: A);
-      rewrite !subcomp; eapply IHHMT2; simpl; tauto.
-  eapply refl.
-    apply clos_rt_rt1n; eapply rt_trans;
-      [apply clos_rt1n_rt, tl_cong_star; eassumption |];
-      eauto using rt_step, step.
-    apply clos_rt_rt1n; eapply rt_trans;
-      [apply clos_rt1n_rt, tl_cong_star; eassumption |];
-      eauto using rt_step, step.
-  replace ([K ↑ 0][γ₁ ! 1]M₁) with ([K :: nil ! 0][γ₁ ! 1]M₁) by reflexivity;
-    replace ([L ↑ 0][γ₂ ! 1]M₁) with ([L :: nil ! 0][γ₂ ! 1]M₁) by reflexivity.
-  rewrite !subcomp; eapply IHHMT3; simpl; eauto.
+  eapply seed_cong; try (constructor; fail); eauto.
+  intros; change ([K :: γ₁ ! 0]M₀ ≡ [L :: γ₂ ! 0]M₀ ::: A); apply IHHMT2; simpl; auto.
+  intros; change ([K :: γ₁ ! 0]M₁ ≡ [L :: γ₂ ! 0]M₁ ::: A); apply IHHMT3; simpl; auto.
+  eapply tc_seed; repeat (eapply subst_types; simpl; eauto using ctx_lequiv_typesL).
+  eapply tc_seed; repeat (eapply subst_types; simpl; eauto using ctx_lequiv_typesR).
 Qed.
 
 Scheme tyctx_Ind := Induction for tyctx Sort Prop.
-
-Lemma seed_cong : forall M M₀ M₁ N N₀ N₁ K L A
-  (HMN  : M ≡ N ::: A)
-  (HMN₀ : forall K L, K ≡ L ::: A -> [K ↑ 0]M₀ ≡ [L ↑ 0]N₀ ::: A)
-  (HMN₁ : forall K L, K ≡ L ::: A -> [K ↑ 0]M₁ ≡ [L ↑ 0]N₁ ::: A)
-  (HRK  : K ↦* seed M M₀ M₁)
-  (HRL  : L ↦* seed N N₀ N₁),
-  K ≡ L ::: stream A.
-Proof.
-  intros; simpl; generalize dependent M; generalize dependent N; revert K L.
-  cofix; intros; simpl; apply EqS.
-    do 2 (eapply head_exp_star; eauto using hd_cong_star;
-      eapply head_expansion; eauto using step; symmetry); auto.
-  eapply seed_cong.
-    apply clos_rt_rt1n; eapply rt_trans;
-      [apply clos_rt1n_rt, tl_cong_star; eassumption |];
-      eauto using rt_step, step.
-    eauto.
-  apply clos_rt_rt1n; eapply rt_trans;
-    [apply clos_rt1n_rt, tl_cong_star; eassumption |];
-    eauto using rt_step, step.
-Qed.
-
-Lemma rec_cong : forall M M₀ M₁ N N₀ N₁ A
-  (HMN  : M ≡ N ::: ω)
-  (HMN₀ : M₀ ≡ N₀ ::: A)
-  (HMN₁ : forall K L K₀ L₀, K ≡ L ::: ω -> K₀ ≡ L₀ ::: A ->
-    [K :: K₀ :: nil ! 0]M₁ ≡ [L :: L₀ :: nil ! 0]N₁ ::: A),
-  rec M M₀ M₁ ≡ rec N N₀ N₁ ::: A.
-Proof.
-  intros; induction HMN;
-    do 2 (eapply head_exp_star; eauto using rec_cong_star;
-      eapply head_expansion; eauto using step; symmetry); auto.
-Qed.
 
 Lemma cong_log_equiv : closed open_simeq.
 Proof.
@@ -544,8 +584,22 @@ Proof.
   (* hole *)
   apply HPMN; assumption.
   (* lam *)
-  eapply head_expansion; eauto using step; symmetry.
-  eapply head_expansion; eauto using step; symmetry.
+  repeat split.
+  eapply tc_lam, subst_types; eauto using ctx_lequiv_typesL; simpl.
+  eapply context_type; eauto; apply (proj2_sig M).
+  eapply tc_lam, subst_types; eauto using ctx_lequiv_typesR; simpl.
+  eapply context_type; eauto; apply (proj2_sig N).
+  intros.
+  eapply head_expansion; eauto using step.
+    eapply tc_app; [| eapply log_equiv_typesL; eauto].
+    eapply tc_lam, subst_types; eauto using ctx_lequiv_typesL; simpl.
+    eapply context_type; eauto; apply (proj2_sig M).
+  symmetry.
+  eapply head_expansion; eauto using step.
+    eapply tc_app; [| eapply log_equiv_typesR; eauto].
+    eapply tc_lam, subst_types; eauto using ctx_lequiv_typesR; simpl.
+    eapply context_type; eauto; apply (proj2_sig N).
+  symmetry.
   rewrite !subcomp.
   eapply IHHTE; simpl; eauto.
   (* appL *)
@@ -557,31 +611,40 @@ Proof.
   fold log_equiv.
   eapply IHHTE; eauto.
   (* s *)
+  repeat split; try (apply IHHTE in HPMN; apply HPMN in HEΓ; simpl in HEΓ; intuition eauto using types; fail).
   eapply Eqωs; [constructor | constructor |].
   eapply IHHTE; eauto.
   (* rec arg *)
   eapply rec_cong.
+  eapply subst_types; simpl; eauto using ctx_lequiv_typesL.
+  eapply subst_types; simpl; eauto using ctx_lequiv_typesR.
   apply IHHTE; auto.
   eapply (refl _ _ (exist _ M₀ HT0)); assumption.
   intros; rewrite !subcomp;
     eapply (refl _ _ (exist _ M₁ HT1)); simpl; auto.
   (* rec base *)
   eapply rec_cong.
+  eapply subst_types; simpl; eauto using ctx_lequiv_typesL.
+  eapply subst_types; simpl; eauto using ctx_lequiv_typesR.
   eapply (refl _ _ (exist _ M HTM)); simpl; auto.
   apply IHHTE; auto.
   intros; rewrite !subcomp;
     eapply (refl _ _ (exist _ M₁ HT1)); simpl; auto.
   (* rec step *)
   eapply rec_cong.
+  eapply subst_types; simpl; eauto using ctx_lequiv_typesL.
+  eapply context_type; eauto; apply (proj2_sig M0).
+  eapply subst_types; simpl; eauto using ctx_lequiv_typesR.
+  eapply context_type; eauto; apply (proj2_sig N).
   eapply (refl _ _ (exist _ M HTM)); simpl; auto.
   eapply (refl _ _ (exist _ M₀ HT1)); auto.
   intros; rewrite !subcomp; apply IHHTE; simpl; auto.
   (* hd *)
   eapply IHHTE in HEΓ; eauto; simpl in *.
-  inversion HEΓ; auto.
+  destruct HEΓ as [HTM [HTN HEΓ]]; inversion HEΓ; subst; clear HEΓ; auto.
   (* tl *)
   eapply IHHTE in HEΓ; eauto; simpl in *.
-  inversion HEΓ; auto.
+  destruct HEΓ as [HTM [HTN HEΓ]]; inversion HEΓ; auto; subst; clear HEΓ; eauto using types.
   (* seed arg *)
   eapply seed_cong; try (constructor; fail).
   apply IHHTE; auto.
@@ -589,6 +652,10 @@ Proof.
   apply (refl _ _ (exist _ M₀ HT0)); simpl; auto.
   intros; change ([K :: γ₁ ! 0]M₁ ≡ [L :: γ₂ ! 0]M₁ ::: B).
   apply (refl _ _ (exist _ M₁ HT1)); simpl; auto.
+  apply tc_seed; eapply subst_types; eauto using ctx_lequiv_typesL; simpl.
+  eapply context_type; eauto; apply (proj2_sig M).
+  apply tc_seed; eapply subst_types; eauto using ctx_lequiv_typesR; simpl.
+  eapply context_type; eauto; apply (proj2_sig N).
   (* seed hd *)
   eapply seed_cong; try (constructor; fail).
   apply (refl _ _ (exist _ M HTM)); simpl; auto.
@@ -596,6 +663,10 @@ Proof.
   apply IHHTE; simpl; auto.
   intros; change ([K :: γ₁ ! 0]M₁ ≡ [L :: γ₂ ! 0]M₁ ::: B).
   apply (refl _ _ (exist _ M₁ HT1)); simpl; auto.
+  apply tc_seed; eapply subst_types; eauto using ctx_lequiv_typesL; simpl.
+  eapply context_type; eauto; apply (proj2_sig M0).
+  apply tc_seed; eapply subst_types; eauto using ctx_lequiv_typesR; simpl.
+  eapply context_type; eauto; apply (proj2_sig N).
   (* seed tl *)
   eapply seed_cong; try (constructor; fail).
   apply (refl _ _ (exist _ M HTM)); simpl; auto.
@@ -603,4 +674,8 @@ Proof.
   apply (refl _ _ (exist _ M₀ HT1)); simpl; auto.
   intros; change ([K :: γ₁ ! 0](plug E (proj1_sig M0)) ≡ [L :: γ₂ ! 0](plug E (proj1_sig N)) ::: B).
   apply IHHTE; simpl; auto.
+  apply tc_seed; eapply subst_types; eauto using ctx_lequiv_typesL; simpl.
+  eapply context_type; eauto; apply (proj2_sig M0).
+  apply tc_seed; eapply subst_types; eauto using ctx_lequiv_typesR; simpl.
+  eapply context_type; eauto; apply (proj2_sig N).
 Qed.
